@@ -3,51 +3,20 @@ name: Deploy Day 1 — Bicep Lab
 on:
   push:
     branches: [main]
-    paths: [labs/bicep-deep/**]    # only triggers when Day 1 lab files change
+    paths: [labs/bicep-deep/**]
   workflow_dispatch:
     inputs:
       action:
-        description: deploy or destroy
+        description: Action to run
         type: choice
-        options: [whatif, deploy, destroy]
-        default: whatif
+        options: [deploy, destroy]
+        default: deploy
 
 permissions:
   security-events: write
   contents: read
 
 jobs:
-  whatif-security-gate:
-    if: github.event.inputs.action == 'whatif'
-    uses: ./.github/workflows/security-gate.yml
-    with:
-      scan-path: labs/bicep-deep/
-    secrets: inherit
-
-  whatif:
-    if: github.event.inputs.action == 'whatif'
-    needs: whatif-security-gate
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: azure/login@v2
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-      - name: Ensure resource group exists
-        run: |
-          az group create \
-            --name lab-bicep-rg \
-            --location eastus \
-            --output none
-      - name: Bicep what-if
-        run: |
-          az deployment group create \
-            --resource-group lab-bicep-rg \
-            --template-file labs/bicep-deep/main.bicep \
-            --parameters environment=dev \
-            --what-if \
-            --what-if-result-format FullResourcePayloads
-
   deploy:
     if: github.event_name == 'push' || github.event.inputs.action == 'deploy'
     uses: ./.github/workflows/bicep-deploy.yml

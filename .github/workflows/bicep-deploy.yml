@@ -56,12 +56,20 @@ jobs:
             --what-if \
             --what-if-result-format FullResourcePayloads
 
-  # Stage 3: actual deploy (environment gate = human approval before apply)
-  deploy:
-    name: Deploy
+  # Stage 3: gate — reviewer inspects what-if output above, then approves or rejects
+  approve-deploy:
+    name: Approve Deploy
     needs: what-if
     runs-on: ubuntu-latest
-    environment: lab-deploy   # add yourself as required reviewer in GitHub Environments
+    environment: lab-deploy
+    steps:
+      - run: echo "What-if reviewed and approved — proceeding to deploy"
+
+  # Stage 4: actual deploy
+  deploy:
+    name: Deploy
+    needs: approve-deploy
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
