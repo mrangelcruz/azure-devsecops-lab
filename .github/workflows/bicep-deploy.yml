@@ -58,7 +58,7 @@ jobs:
 
   # Stage 3: gate — reviewer inspects what-if output above, then approves or rejects
   approve-deploy:
-    name: Approve Deploy
+    name: Approve Plan (What-if) to trigger Deploy
     needs: what-if
     runs-on: ubuntu-latest
     environment: lab-deploy
