@@ -13,8 +13,16 @@ on:
         default: whatif
 
 jobs:
+  whatif-security-gate:
+    if: github.event.inputs.action == 'whatif'
+    uses: ./.github/workflows/security-gate.yml
+    with:
+      scan-path: labs/bicep-deep/
+    secrets: inherit
+
   whatif:
     if: github.event.inputs.action == 'whatif'
+    needs: whatif-security-gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
