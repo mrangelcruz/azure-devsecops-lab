@@ -6,7 +6,7 @@ param isProduction bool = environment == 'prod'
 
 param location string = resourceGroup().location
 
-var prefix = 'revio-${environment}'
+var prefix = 'lab-${environment}'
 
 module logs 'modules/log-analytics.bicep' = {
   name: 'logs'
