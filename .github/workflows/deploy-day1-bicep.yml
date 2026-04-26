@@ -11,6 +11,11 @@ on:
         type: choice
         options: [deploy, destroy]
         default: deploy
+      mode:
+        description: Deployment mode
+        type: choice
+        options: [Incremental, Complete]
+        default: Incremental
 
 permissions:
   security-events: write
@@ -25,6 +30,7 @@ jobs:
       template-file: labs/bicep-deep/main.bicep
       parameters: environment=dev
       scan-path: labs/bicep-deep/
+      mode: ${{ github.event.inputs.mode || 'Incremental' }}
     secrets:
       AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
 
