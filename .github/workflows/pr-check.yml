@@ -10,3 +10,9 @@ jobs:
     with:
       scan-path: '.'
     secrets: inherit
+
+  all-checks-passed:
+    needs: [security-gate]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "All checks passed"
