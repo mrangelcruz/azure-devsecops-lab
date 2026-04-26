@@ -12,6 +12,10 @@ on:
         options: [whatif, deploy, destroy]
         default: whatif
 
+permissions:
+  security-events: write
+  contents: read
+
 jobs:
   whatif-security-gate:
     if: github.event.inputs.action == 'whatif'
