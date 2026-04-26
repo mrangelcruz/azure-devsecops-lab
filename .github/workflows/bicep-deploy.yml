@@ -16,6 +16,10 @@ on:
       scan-path:
         required: true
         type: string
+      mode:
+        required: false
+        type: string
+        default: Incremental
     secrets:
       AZURE_CREDENTIALS:
         required: true
@@ -53,15 +57,24 @@ jobs:
             --resource-group ${{ inputs.resource-group }} \
             --template-file ${{ inputs.template-file }} \
             ${{ inputs.parameters != '' && format('--parameters {0}', inputs.parameters) || '' }} \
+            --mode ${{ inputs.mode }} \
             --what-if \
             --what-if-result-format FullResourcePayloads
 
-  # Stage 3: actual deploy (environment gate = human approval before apply)
-  deploy:
-    name: Deploy
+  # Stage 3: gate — reviewer inspects what-if output above, then approves or rejects
+  approve-deploy:
+    name: Approve Deploy
     needs: what-if
     runs-on: ubuntu-latest
-    environment: lab-deploy   # add yourself as required reviewer in GitHub Environments
+    environment: lab-deploy
+    steps:
+      - run: echo "What-if reviewed and approved — proceeding to deploy"
+
+  # Stage 4: actual deploy
+  deploy:
+    name: Deploy
+    needs: approve-deploy
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -75,7 +88,8 @@ jobs:
           az deployment group create \
             --resource-group ${{ inputs.resource-group }} \
             --template-file ${{ inputs.template-file }} \
-            ${{ inputs.parameters != '' && format('--parameters {0}', inputs.parameters) || '' }}
+            ${{ inputs.parameters != '' && format('--parameters {0}', inputs.parameters) || '' }} \
+            --mode ${{ inputs.mode }}
 
       - name: Show outputs
         run: |
