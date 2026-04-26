@@ -1,0 +1,12 @@
+name: PR Security Check
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  security-gate:
+    uses: ./.github/workflows/security-gate.yml
+    with:
+      scan-path: '.'
+    secrets: inherit

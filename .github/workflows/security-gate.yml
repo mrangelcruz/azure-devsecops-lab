@@ -1,0 +1,111 @@
+name: Security Gate
+
+on:
+  workflow_call:
+    inputs:
+      scan-path:
+        required: true
+        type: string
+      image-ref:          # optional: pass a built image tag to scan
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  semgrep:
+    name: Semgrep SAST
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Semgrep scan
+        uses: semgrep/semgrep-action@v1
+        with:
+          # p/csharp     — .NET/C# SAST: SQLi, XSS, hardcoded creds, unsafe deserialization
+          # p/bicep       — Bicep/ARM IaC misconfigurations
+          # p/secrets     — API keys, connection strings, tokens in code
+          # p/owasp-top-ten — OWASP A01–A10 mapped rules
+          config: >-
+            p/csharp
+            p/bicep
+            p/secrets
+            p/owasp-top-ten
+          generateSarif: '1'
+        # Semgrep OSS is free; SEMGREP_APP_TOKEN enables Cloud dashboard (optional)
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+
+      - name: Upload Semgrep SARIF → GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+        if: always()   # upload even on failure so findings appear in Security tab
+
+  trivy-fs:
+    name: Trivy IaC + dependency scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: ${{ inputs.scan-path }}
+          format: sarif
+          output: trivy-fs.sarif
+          severity: CRITICAL,HIGH
+          exit-code: '1'        # FAIL on CRITICAL or HIGH — blocks merge
+          scanners: vuln,misconfig,secret
+          # vuln      → NuGet package CVEs
+          # misconfig → Bicep/Dockerfile policy violations (public storage, no soft-delete, etc.)
+          # secret    → credential patterns in code
+
+      - name: Upload Trivy SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs.sarif
+        if: always()
+
+  trivy-image:
+    name: Trivy container image scan
+    runs-on: ubuntu-latest
+    if: inputs.image-ref != ''
+    steps:
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: image
+          image-ref: ${{ inputs.image-ref }}
+          format: sarif
+          output: trivy-image.sarif
+          severity: CRITICAL
+          exit-code: '1'        # CRITICAL CVEs in the base image block deployment
+
+      - name: Upload image SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-image.sarif
+        if: always()
+
+  conftest:
+    name: Policy-as-Code (OPA/Conftest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Conftest
+        run: |
+          curl -sLO https://github.com/open-policy-agent/conftest/releases/latest/download/conftest_Linux_x86_64.tar.gz
+          tar xzf conftest_Linux_x86_64.tar.gz
+          sudo mv conftest /usr/local/bin/
+
+      - name: Run Conftest on Bicep and Helm values
+        run: |
+          # Find all Bicep and Helm values files under the scan path
+          FILES=$(find ${{ inputs.scan-path }} \( -name "*.bicep" -o -name "values*.yaml" \) 2>/dev/null)
+          if [ -n "$FILES" ]; then
+            echo "$FILES" | xargs conftest test --policy policy/ --no-color
+          else
+            echo "No Bicep or Helm values files found — skipping"
+          fi

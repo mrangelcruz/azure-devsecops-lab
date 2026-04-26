@@ -1,0 +1,87 @@
+name: Bicep Deploy
+
+on:
+  workflow_call:
+    inputs:
+      resource-group:
+        required: true
+        type: string
+      template-file:
+        required: true
+        type: string
+      parameters:
+        required: false
+        type: string
+        default: ''
+      scan-path:
+        required: true
+        type: string
+    secrets:
+      AZURE_CREDENTIALS:
+        required: true
+
+jobs:
+  # Stage 1: Security gates must pass before we ever touch Azure
+  security-gate:
+    uses: ./.github/workflows/security-gate.yml
+    with:
+      scan-path: ${{ inputs.scan-path }}
+
+  # Stage 2: what-if shows exactly what will change — no surprises
+  what-if:
+    name: Bicep what-if
+    needs: security-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Ensure resource group exists
+        run: |
+          az group create \
+            --name ${{ inputs.resource-group }} \
+            --location eastus \
+            --output none
+
+      - name: Bicep what-if (Bicep's terraform plan)
+        run: |
+          az deployment group create \
+            --resource-group ${{ inputs.resource-group }} \
+            --template-file ${{ inputs.template-file }} \
+            ${{ inputs.parameters != '' && format('--parameters {0}', inputs.parameters) || '' }} \
+            --what-if \
+            --what-if-result-format FullResourcePayloads
+
+  # Stage 3: actual deploy (environment gate = human approval before apply)
+  deploy:
+    name: Deploy
+    needs: what-if
+    runs-on: ubuntu-latest
+    environment: lab-deploy   # add yourself as required reviewer in GitHub Environments
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy
+        run: |
+          az deployment group create \
+            --resource-group ${{ inputs.resource-group }} \
+            --template-file ${{ inputs.template-file }} \
+            ${{ inputs.parameters != '' && format('--parameters {0}', inputs.parameters) || '' }}
+
+      - name: Show outputs
+        run: |
+          DEPLOY_NAME=$(basename ${{ inputs.template-file }} .bicep)
+          az deployment group show \
+            --resource-group ${{ inputs.resource-group }} \
+            --name $DEPLOY_NAME \
+            --query properties.outputs \
+            -o json
