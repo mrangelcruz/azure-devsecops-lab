@@ -1,26 +1,41 @@
-@description('Environment name (dev, staging, prod)')
 @allowed(['dev', 'staging', 'prod'])
 param environment string = 'dev'
 
-@description('Azure region for all resources')
+@description('Set to true to retain logs for 90 days (prod) vs 30 days (non-prod)')
+param isProduction bool = environment == 'prod'
+
 param location string = resourceGroup().location
 
-var suffix = uniqueString(resourceGroup().id)
-var storageAccountName = 'labstore${environment}${suffix}'
+var prefix = 'revio-${environment}'
 
-resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
-  name: storageAccountName
-  location: location
-  sku: {
-    name: 'Standard_LRS'
-  }
-  kind: 'StorageV2'
-  properties: {
-    minimumTlsVersion: 'TLS1_2'
-    allowBlobPublicAccess: false
-    supportsHttpsTrafficOnly: true
+module logs 'modules/log-analytics.bicep' = {
+  name: 'logs'
+  params: {
+    name: '${prefix}-logs'
+    location: location
+    retentionDays: isProduction ? 90 : 30
   }
 }
 
-output storageAccountName string = storageAccount.name
-output storageAccountId string = storageAccount.id
+module acaEnv 'modules/container-app-env.bicep' = {
+  name: 'aca-env'
+  params: {
+    name: '${prefix}-env'
+    location: location
+    logWorkspaceCustomerId: logs.outputs.customerId
+    logWorkspacePrimaryKey: logs.outputs.primaryKey
+  }
+}
+
+module app 'modules/container-app.bicep' = {
+  name: 'app'
+  params: {
+    name: '${prefix}-api'
+    location: location
+    envId: acaEnv.outputs.envId
+    minReplicas: isProduction ? 2 : 0
+    maxReplicas: isProduction ? 10 : 3
+  }
+}
+
+output appUrl string = 'https://${app.outputs.fqdn}'
