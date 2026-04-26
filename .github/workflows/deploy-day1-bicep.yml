@@ -9,10 +9,33 @@ on:
       action:
         description: deploy or destroy
         type: choice
-        options: [deploy, destroy]
-        default: deploy
+        options: [whatif, deploy, destroy]
+        default: whatif
 
 jobs:
+  whatif:
+    if: github.event.inputs.action == 'whatif'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Ensure resource group exists
+        run: |
+          az group create \
+            --name lab-bicep-rg \
+            --location eastus \
+            --output none
+      - name: Bicep what-if
+        run: |
+          az deployment group create \
+            --resource-group lab-bicep-rg \
+            --template-file labs/bicep-deep/main.bicep \
+            --parameters environment=dev \
+            --what-if \
+            --what-if-result-format FullResourcePayloads
+
   deploy:
     if: github.event_name == 'push' || github.event.inputs.action == 'deploy'
     uses: ./.github/workflows/bicep-deploy.yml
