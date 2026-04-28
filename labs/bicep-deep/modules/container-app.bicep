@@ -3,10 +3,12 @@ param location string
 param envId string
 param image string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
 
-@minValue(0) @maxValue(10)
+@minValue(0)
+@maxValue(10)
 param minReplicas int = 0
 
-@minValue(1) @maxValue(10)
+@minValue(1)
+@maxValue(10)
 param maxReplicas int = 3
 
 resource app 'Microsoft.App/containerApps@2023-05-01' = {
